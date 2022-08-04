@@ -1,11 +1,12 @@
 package cloud.agileframework.data.common.dao;
 
 import cloud.agileframework.common.util.object.ObjectUtil;
-import org.springframework.data.annotation.Transient;
 
+import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -21,7 +22,8 @@ public class TableWrapper<T> {
         Class<T> tClass = (Class<T>) o.getClass();
         this.tableName = toTableName.apply(tClass);
         columns = toColumnNamesFunction.apply(tClass).stream()
-                .filter(c -> c.getMember().getDeclaringClass().getAnnotation(Transient.class) == null)
+                .filter(c -> Arrays.stream(((AccessibleObject) (c.getMember())).getAnnotations()).noneMatch(annotation ->
+                        "Transient".equals(annotation.annotationType().getSimpleName())))
                 .collect(Collectors.toList());
 
 

@@ -7,6 +7,7 @@ import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLExpr;
 import com.alibaba.druid.sql.ast.expr.SQLBinaryOpExpr;
 import com.alibaba.druid.sql.ast.expr.SQLBinaryOperator;
+import com.alibaba.druid.sql.ast.expr.SQLTimestampExpr;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
@@ -14,6 +15,7 @@ import java.lang.reflect.Method;
 import java.util.Date;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TimeZone;
 
 public class ColumnName {
     //字段名
@@ -78,15 +80,15 @@ public class ColumnName {
 
     public SQLExpr sqlValue() {
         Object v = getValue().orElse(null);
-        if(v == null){
+        if (v == null) {
             return null;
         }
-        
+
         SQLExpr right;
         if (NumberUtil.isNumber(v.getClass()) || v instanceof Boolean) {
             right = SQLUtils.toSQLExpr(Objects.toString(v));
         } else if (v instanceof Date) {
-            right = SQLUtils.toSQLExpr(Objects.toString(((Date) v).getTime()));
+            right = new SQLTimestampExpr((Date) v, TimeZone.getDefault());
         } else {
             right = SQLUtils.toSQLExpr(String.format("'%s'", v));
         }

@@ -6,7 +6,7 @@
     <name>agile-data-common</name>
     <groupId>cloud.agileframework</groupId>
     <artifactId>agile-data-common</artifactId>
-    <version>2.1.0.M5</version>
+    <version>2.1.0.M35</version>
     <packaging>jar</packaging>
     <description>agile-context</description>
     <url>https://github.com/mydeathtrial/agile-data-common</url>
@@ -45,12 +45,22 @@
             <timezone>+8</timezone>
         </developer>
     </developers>
-    
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
             <version>2.6.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+            <version>2.6.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity</artifactId>
+            <version>1.7</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.data</groupId>
@@ -66,13 +76,25 @@
         <dependency>
             <groupId>cloud.agileframework</groupId>
             <artifactId>agile-sql</artifactId>
-            <version>2.1.0.M5</version>
+            <version>2.1.0.M35</version>
         </dependency>
         <dependency>
             <groupId>cloud.agileframework</groupId>
             <artifactId>agile-dictionary</artifactId>
-            <version>2.1.0.M5</version>
+            <version>2.1.0.M35</version>
             <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>cloud.agileframework</groupId>
+            <artifactId>agile-security</artifactId>
+            <version>2.1.0.M35</version>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <version>2.6.0</version>
         </dependency>
     </dependencies>
 

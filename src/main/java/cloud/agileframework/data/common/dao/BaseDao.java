@@ -4,7 +4,6 @@ import cloud.agileframework.common.util.clazz.ClassUtil;
 import cloud.agileframework.common.util.clazz.TypeReference;
 import cloud.agileframework.common.util.object.ObjectUtil;
 import cloud.agileframework.data.common.dictionary.DataExtendManager;
-import cloud.agileframework.data.common.dictionary.DictionaryManager;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.PagerUtils;
 import com.alibaba.druid.sql.SQLUtils;
@@ -12,23 +11,36 @@ import com.alibaba.druid.sql.ast.SQLOrderBy;
 import com.alibaba.druid.sql.ast.SQLOrderingSpecification;
 import com.alibaba.druid.sql.ast.expr.SQLBinaryOpExpr;
 import com.alibaba.druid.sql.ast.expr.SQLBinaryOperator;
-import com.alibaba.druid.sql.ast.statement.*;
+import com.alibaba.druid.sql.ast.statement.SQLDeleteStatement;
+import com.alibaba.druid.sql.ast.statement.SQLExprTableSource;
+import com.alibaba.druid.sql.ast.statement.SQLInsertStatement;
+import com.alibaba.druid.sql.ast.statement.SQLSelectItem;
+import com.alibaba.druid.sql.ast.statement.SQLSelectQueryBlock;
+import com.alibaba.druid.sql.ast.statement.SQLUpdateSetItem;
+import com.alibaba.druid.sql.ast.statement.SQLUpdateStatement;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.annotation.Transient;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.repository.PagingAndSortingRepository;
 
+import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.sql.Connection;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -83,8 +95,6 @@ public interface BaseDao {
         }
         return isTrue;
     }
-
-    ;
 
     /**
      * 获取数据库连接
@@ -164,7 +174,7 @@ public interface BaseDao {
         if (o instanceof Class) {
             throw new IllegalArgumentException("Parameter must be of type POJO");
         }
-        return saveAndReturn(o, true);
+        return saveAndReturn(o, Boolean.FALSE);
     }
 
     /**
@@ -176,12 +186,13 @@ public interface BaseDao {
      */
     @SuppressWarnings("unchecked")
     default <T> List<T> saveAndReturn(Iterable<T> list) {
-        T o = list.iterator().next();
-        Class<T> aClass = (Class<T>) o.getClass();
-        PagingAndSortingRepository<T, Object> r = getRepository(aClass);
-        Iterable<T> elements = r.saveAll(list);
-        dictionaryManager().cover(elements);
-        return Lists.newArrayList(elements);
+        Iterator<T> iterator = list.iterator();
+        if (iterator.hasNext()) {
+            T obj = iterator.next();
+            Class<T> clazz = (Class<T>) obj.getClass();
+            return Lists.newArrayList(getRepository(clazz).saveAll(list));
+        }
+        return new ArrayList<>(0);
     }
 
     /**
@@ -191,13 +202,10 @@ public interface BaseDao {
      * @param id         数据主键
      * @return 是否存在
      */
-    default <T> boolean existsById(Class<T> tableClass, Object id) {
+    default <T> boolean existsById(Class<T> tableClass, Object id) throws NoSuchFieldException {
         PagingAndSortingRepository<T, Object> r = getRepository(tableClass);
-        return r.existsById(id);
+        return r.existsById(toIdType(tableClass, id));
     }
-
-    ;
-
 
     /**
      * 更新或新增
@@ -206,21 +214,18 @@ public interface BaseDao {
      * @param <T> 表对应的实体类型
      * @return 是否更新成功
      */
-    default <T> boolean update(T o) {
+    default <T> boolean update(T o) throws NoSuchFieldException, IllegalAccessException {
         if (o instanceof Class) {
             throw new IllegalArgumentException("Parameter must be of type POJO");
         }
         Class<T> aClass = (Class<T>) o.getClass();
-        try {
-            Object id = getId(o);
-            if (existsById(aClass, id)) {
-                deleteById(aClass, id);
-                saveAndReturn(o, true);
-                return true;
-            }
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            e.printStackTrace();
+        Object id = getId(o);
+        if (existsById(aClass, id)) {
+            deleteById(aClass, id);
+            saveAndReturn(o, true);
+            return true;
         }
+
         return false;
     }
 
@@ -233,22 +238,19 @@ public interface BaseDao {
      * @throws IllegalAccessException 异常
      */
     @SuppressWarnings("unchecked")
-    default <T> T updateOfNotNull(T o) {
+    default <T> T updateOfNotNull(T o) throws NoSuchFieldException, IllegalAccessException {
         if (o instanceof Class) {
             throw new IllegalArgumentException("Parameter must be of type POJO");
         }
         Class<T> aClass = (Class<T>) o.getClass();
-        try {
-            Object id = getId(o);
-            if (existsById(aClass, id)) {
-                T old = findOne(aClass, id);
-                ObjectUtil.copyProperties(old, o, ObjectUtil.Compare.DIFF_TARGET_NULL);
-                deleteById(aClass, id);
-                return saveAndReturn(o, true);
-            }
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            e.printStackTrace();
+        Object id = getId(o);
+        if (existsById(aClass, id)) {
+            T old = findOne(aClass, id);
+            ObjectUtil.copyProperties(old, o, ObjectUtil.Compare.DIFF_TARGET_NULL);
+            deleteById(aClass, id);
+            return saveAndReturn(o, true);
         }
+
         return null;
     }
 
@@ -274,11 +276,11 @@ public interface BaseDao {
      */
     default <T> boolean deleteById(Class<T> tableClass, Object id) {
         PagingAndSortingRepository<T, Object> repository = getRepository(tableClass);
-        if (!repository.existsById(id)) {
+        try {
+            repository.deleteById(toIdType(tableClass, id));
+        } catch (Exception e) {
             return false;
         }
-
-        repository.deleteById(id);
         return true;
     }
 
@@ -289,8 +291,7 @@ public interface BaseDao {
      * @param <T>        查询的目标表对应实体类型
      */
     default <T> void deleteAll(Class<T> tableClass) {
-        PagingAndSortingRepository<T, Object> repository = getRepository(tableClass);
-        repository.deleteAll();
+        getRepository(tableClass).deleteAll();
     }
 
     /**
@@ -310,13 +311,20 @@ public interface BaseDao {
      * @param <T>        查询的目标表对应实体类型
      * @param ids        主键数组
      */
-    default <T> void deleteInBatch(Class<T> tableClass, Object[] ids) {
+    default <T> void deleteInBatch(Class<T> tableClass, Object[] ids) throws NoSuchFieldException {
         deleteInBatch(tableClass, Sets.newHashSet(ids));
     }
 
-    default <T> void deleteInBatch(Class<T> tableClass, Iterable<?> ids) {
+    default <T> void deleteInBatch(Class<T> tableClass, Iterable<?> ids) throws NoSuchFieldException {
+        if (ids == null) {
+            return;
+        }
         PagingAndSortingRepository<T, Object> repository = getRepository(tableClass);
-        repository.deleteAllById(Sets.newHashSet(ids));
+        Set<Object> set = Sets.newHashSet();
+        for (Object id : ids) {
+            set.add(toIdType(tableClass, id));
+        }
+        repository.deleteAllById(set);
     }
 
     /**
@@ -381,7 +389,7 @@ public interface BaseDao {
      * @return 查询的结果
      */
     @SuppressWarnings("unchecked")
-    default <T> T findOne(String sql, Class<T> clazz, Object parameters) {
+    default <T> T findOne(String sql, Class<T> clazz, Object... parameters) {
         T newObject = findBySQL(sql, clazz, parameters).stream().findFirst().orElse(null);
         dictionaryManager().cover(newObject);
         return newObject;
@@ -450,6 +458,20 @@ public interface BaseDao {
     /**
      * 查询指定tableClass对应表的全表分页
      *
+     * @param tableClass  查询的目标表对应实体类型，Entity
+     * @param pageRequest 分页信息
+     * @param <T>         目标表对应实体类型
+     * @return 内容为实体的Page类型分页结果
+     */
+    default <T> Page<T> pageByClass(Class<T> tableClass, PageRequest pageRequest) {
+        Page<T> pageInfo = getRepository(tableClass).findAll(pageRequest);
+        dictionaryManager().cover(pageInfo.getContent());
+        return pageInfo;
+    }
+
+    /**
+     * 查询指定tableClass对应表的全表分页
+     *
      * @param tableClass 查询的目标表对应实体类型，Entity
      * @param page       第几页
      * @param size       页大小
@@ -457,22 +479,23 @@ public interface BaseDao {
      * @return 内容为实体的Page类型分页结果
      */
     default <T> Page<T> pageByClass(Class<T> tableClass, int page, int size) {
-        Page<T> pageInfo = getRepository(tableClass).findAll(PageRequest.of(page, size));
-        dictionaryManager().cover(pageInfo.getContent());
-        return pageInfo;
+        return pageByClass(tableClass, PageRequest.of(page - 1, size));
     }
 
     /**
      * 分页查询
      *
      * @param sql        查询的sql语句
-     * @param page       第几页
-     * @param size       页大小
+     * @param pageable   分页信息
      * @param parameters 对象数组类型的参数集合
      * @return Page类型的查询结果
      */
     @SuppressWarnings("unchecked")
-    <T> Page<T> pageBySQL(String sql, int page, int size, Class<T> clazz, Object parameters);
+    <T> Page<T> pageBySQL(String sql, PageRequest pageable, Class<T> clazz, Object... parameters);
+
+    default <T> Page<T> pageBySQL(String sql, int page, int size, Class<T> clazz, Object... parameters) {
+        return pageBySQL(sql, PageRequest.of(page - 1, size, Sort.unsorted()), clazz, parameters);
+    }
 
     /**
      * 指定tableClass对应表的全表查询
@@ -501,7 +524,7 @@ public interface BaseDao {
         return Lists.newArrayList(list);
     }
 
-    <T> List<T> findBySQL(String sql, Class<T> clazz, Object parameters);
+    <T> List<T> findBySQL(String sql, Class<T> clazz, Object... parameters);
 
     /**
      * 根据sql语句查询指定类型clazz列表
@@ -515,7 +538,7 @@ public interface BaseDao {
      * @return 结果集
      */
     @SuppressWarnings("unchecked")
-    <T> List<T> findBySQL(String sql, Class<T> clazz, Integer firstResult, Integer maxResults, Object parameters);
+    <T> List<T> findBySQL(String sql, Class<T> clazz, Integer firstResult, Integer maxResults, Object... parameters);
 
     /**
      * 根据sql语句查询列表，结果类型为List<Map<String, Object>>
@@ -524,7 +547,7 @@ public interface BaseDao {
      * @param parameters Map类型参数集合
      * @return 结果类型为List套Map的查询结果
      */
-    List<Map<String, Object>> findBySQL(String sql, Object parameters);
+    List<Map<String, Object>> findBySQL(String sql, Object... parameters);
 
     /**
      * sql形式写操作
@@ -533,7 +556,7 @@ public interface BaseDao {
      * @param parameters 对象数组形式参数集合
      * @return 影响条数
      */
-    int updateBySQL(String sql, Object parameters);
+    int updateBySQL(String sql, Object... parameters);
 
     /**
      * 根据实体类型tableClass与主键值集合ids，查询实体列表
@@ -588,7 +611,7 @@ public interface BaseDao {
      *
      * @param list 要更新的数据集合
      */
-    default <T> void batchUpdate(List<T> list) {
+    default <T> void batchUpdate(List<T> list) throws NoSuchFieldException, IllegalAccessException {
         batchUpdate(list, 1000);
     }
 
@@ -617,7 +640,7 @@ public interface BaseDao {
      * @param list      要更新的数据集合
      * @param batchSize 多少条执行一次更新
      */
-    default <T> void batchUpdate(List<T> list, int batchSize) {
+    default <T> void batchUpdate(List<T> list, int batchSize) throws NoSuchFieldException, IllegalAccessException {
         for (Object o : list) {
             update(o);
         }
@@ -660,7 +683,7 @@ public interface BaseDao {
     default void setId(Object o, Object id) throws NoSuchFieldException, IllegalAccessException {
         final Field idField = getIdField(o.getClass());
         idField.setAccessible(true);
-        idField.set(o, id);
+        idField.set(o, ObjectUtil.to(id, new TypeReference<>(idField.getType())));
     }
 
     /**
@@ -850,7 +873,8 @@ public interface BaseDao {
         Class<?> tableClass = o.getClass();
         Set<ColumnName> fields = toColumnNames(tableClass)
                 .stream()
-                .filter(c -> c.getMember().getDeclaringClass().getAnnotation(Transient.class) == null)
+                .filter(c -> Arrays.stream(((AccessibleObject) (c.getMember())).getAnnotations()).noneMatch(annotation ->
+                        "Transient".equals(annotation.annotationType().getSimpleName())))
                 .collect(Collectors.toSet());
         Map<String, Optional<Object>> map = fields.stream().filter(f -> f.getMember() instanceof Field)
                 .collect(Collectors.toMap(ColumnName::getName, f -> Optional.ofNullable(ObjectUtil.getFieldValue(o, (Field) f.getMember()))));
@@ -875,6 +899,4 @@ public interface BaseDao {
         private ColumnName column;
         private String value;
     }
-
-
 }
