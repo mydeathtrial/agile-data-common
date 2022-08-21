@@ -6,7 +6,7 @@
     <name>agile-data-common</name>
     <groupId>cloud.agileframework</groupId>
     <artifactId>agile-data-common</artifactId>
-    <version>2.1.0.M35</version>
+    <version>2.1.0.M37</version>
     <packaging>jar</packaging>
     <description>agile-context</description>
     <url>https://github.com/mydeathtrial/agile-data-common</url>
@@ -76,18 +76,18 @@
         <dependency>
             <groupId>cloud.agileframework</groupId>
             <artifactId>agile-sql</artifactId>
-            <version>2.1.0.M35</version>
+            <version>2.1.0.M37</version>
         </dependency>
         <dependency>
             <groupId>cloud.agileframework</groupId>
             <artifactId>agile-dictionary</artifactId>
-            <version>2.1.0.M35</version>
+            <version>2.1.0.M37</version>
             <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>cloud.agileframework</groupId>
             <artifactId>agile-security</artifactId>
-            <version>2.1.0.M35</version>
+            <version>2.1.0.M37</version>
             <optional>true</optional>
         </dependency>
 
