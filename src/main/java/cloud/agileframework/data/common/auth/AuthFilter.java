@@ -1,5 +1,6 @@
 package cloud.agileframework.data.common.auth;
 
+import cloud.agileframework.common.constant.Constant;
 import cloud.agileframework.common.util.template.VelocityUtil;
 import cloud.agileframework.data.common.auth.annotation.AuthData;
 import cloud.agileframework.spring.util.SecurityUtil;
@@ -132,17 +133,23 @@ public class AuthFilter extends FilterEventAdapter {
         return super.connection_prepareCall(chain, connection, parseSql(sql), resultSetType, resultSetConcurrency, resultSetHoldability);
     }
 
-    private String parseSql(String sql) {
+    private String parseSql(String expression) {
         AuthData authData = config.get();
         if (authData == null
                 || (Boolean.FALSE.equals(authData.enable())
                 || filterMapping == null
                 || filterMapping.isEmpty()
-                || filterMapping.keySet().stream().noneMatch(sql::contains))) {
-            return sql;
+                || filterMapping.keySet().stream().noneMatch(expression::contains))) {
+            return expression;
         }
         try {
+            String sql = expression;
             UserDetails userDetails = SecurityUtil.currentUser();
+            if (authData.group().length > 0) {
+                JSONObject jsonObject = (JSONObject) JSON.toJSON(userDetails);
+                jsonObject.put(Constant.AgileAbout.AUTH_GROUP, authData.group());
+                sql = VelocityUtil.parse(expression, jsonObject);
+            }
 
             SQLStatement sqlStatement = SQLUtils.parseSingleMysqlStatement(sql);
             if (sqlStatement instanceof SQLSelectStatement) {
@@ -152,15 +159,10 @@ public class AuthFilter extends FilterEventAdapter {
             } else if (sqlStatement instanceof SQLUnionQueryTableSource) {
                 parsing(((SQLUnionQueryTableSource) sqlStatement).getUnion());
             }
-            if (authData.group().length > 0) {
-                JSONObject jsonObject = (JSONObject) JSON.toJSON(userDetails);
-                jsonObject.put("AUTH_GROUP", authData.group());
-                return SqlUtil.parserSQL(SQLUtils.toSQLString(sqlStatement), jsonObject);
-            }
 
             return SqlUtil.parserSQL(SQLUtils.toSQLString(sqlStatement), userDetails);
         } catch (Exception e) {
-            return sql;
+            return expression;
         }
     }
 
