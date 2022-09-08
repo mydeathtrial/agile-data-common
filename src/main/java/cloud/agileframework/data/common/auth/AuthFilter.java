@@ -133,60 +133,65 @@ public class AuthFilter extends FilterEventAdapter {
         return super.connection_prepareCall(chain, connection, parseSql(sql), resultSetType, resultSetConcurrency, resultSetHoldability);
     }
 
-    private String parseSql(String expression) {
+    private String parseSql(String sql) {
         AuthData authData = config.get();
         if (authData == null
                 || (Boolean.FALSE.equals(authData.enable())
                 || filterMapping == null
                 || filterMapping.isEmpty()
-                || filterMapping.keySet().stream().noneMatch(expression::contains))) {
-            return expression;
+                || filterMapping.keySet().stream().noneMatch(sql::contains))) {
+            return sql;
         }
         try {
-            String sql = expression;
             UserDetails userDetails = SecurityUtil.currentUser();
             if (authData.group().length > 0) {
                 JSONObject jsonObject = (JSONObject) JSON.toJSON(userDetails);
                 jsonObject.put(Constant.AgileAbout.AUTH_GROUP, authData.group());
-                sql = VelocityUtil.parse(expression, jsonObject);
             }
 
             SQLStatement sqlStatement = SQLUtils.parseSingleMysqlStatement(sql);
             if (sqlStatement instanceof SQLSelectStatement) {
-                parsing(((SQLSelectStatement) sqlStatement).getSelect());
+                parsing(((SQLSelectStatement) sqlStatement).getSelect(), authData);
             } else if (sqlStatement instanceof SQLSubqueryTableSource) {
-                parsing(((SQLSubqueryTableSource) sqlStatement).getSelect());
+                parsing(((SQLSubqueryTableSource) sqlStatement).getSelect(), authData);
             } else if (sqlStatement instanceof SQLUnionQueryTableSource) {
-                parsing(((SQLUnionQueryTableSource) sqlStatement).getUnion());
+                parsing(((SQLUnionQueryTableSource) sqlStatement).getUnion(), authData);
+            } else if (sqlStatement instanceof SQLJoinTableSource) {
+                parsing(((SQLJoinTableSource) sqlStatement).getLeft(), authData);
+                parsing(((SQLJoinTableSource) sqlStatement).getRight(), authData);
             }
 
             return SqlUtil.parserSQL(SQLUtils.toSQLString(sqlStatement), userDetails);
         } catch (Exception e) {
-            return expression;
+            return sql;
         }
     }
 
-    private void parsing(SQLSelectQuery sqlSelectQuery) {
+    private void parsing(SQLSelectQuery sqlSelectQuery, AuthData authData) {
         if (sqlSelectQuery instanceof SQLSelectQueryBlock) {
-            parsing(((SQLSelectQueryBlock) sqlSelectQuery).getFrom());
+            parsing(((SQLSelectQueryBlock) sqlSelectQuery).getFrom(), authData);
         } else if (sqlSelectQuery instanceof SQLUnionQuery) {
             for (SQLSelectQuery sqlSelectQuery2 : ((SQLUnionQuery) sqlSelectQuery).getChildren()) {
-                parsing(sqlSelectQuery2);
+                parsing(sqlSelectQuery2, authData);
             }
         }
     }
 
-    private void parsing(SQLSelect select) {
-        parsing(select.getQueryBlock());
+    private void parsing(SQLSelect select, AuthData authData) {
+        parsing(select.getQueryBlock(), authData);
     }
 
-    private void parsing(SQLTableSource table) {
+    private void parsing(SQLTableSource table, AuthData authData) {
         if (table instanceof SQLExprTableSource) {
             String tableProxy = filterMapping.get(((SQLExprTableSource) table).getTableName());
             if (!StringUtils.isBlank(tableProxy)) {
 
                 UserDetails userDetails = SecurityUtil.currentUser();
-                tableProxy = VelocityUtil.parse(tableProxy, userDetails);
+                JSONObject jsonObject = (JSONObject) JSON.toJSON(userDetails);
+                if (authData.group().length > 0) {
+                    jsonObject.put(Constant.AgileAbout.AUTH_GROUP, authData.group());
+                }
+                tableProxy = VelocityUtil.parse(tableProxy, jsonObject);
 
                 String alias = table.getAlias();
                 alias = alias == null ? "SUB_ALIAS" : alias;
@@ -198,14 +203,14 @@ public class AuthFilter extends FilterEventAdapter {
                 }
             }
         } else if (table instanceof SQLJoinTableSource) {
-            parsing(((SQLJoinTableSource) table).getLeft());
-            parsing(((SQLJoinTableSource) table).getRight());
+            parsing(((SQLJoinTableSource) table).getLeft(), authData);
+            parsing(((SQLJoinTableSource) table).getRight(), authData);
         } else if (table instanceof SQLSubqueryTableSource) {
-            parsing(((SQLSubqueryTableSource) table).getSelect());
+            parsing(((SQLSubqueryTableSource) table).getSelect(), authData);
         } else if (table instanceof SQLUnionQueryTableSource) {
             SQLUnionQuery union = ((SQLUnionQueryTableSource) table).getUnion();
             for (SQLSelectQuery sqlSelectQuery : union.getChildren()) {
-                parsing(sqlSelectQuery);
+                parsing(sqlSelectQuery, authData);
             }
         }
     }
