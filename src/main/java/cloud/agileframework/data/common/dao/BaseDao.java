@@ -1,9 +1,11 @@
 package cloud.agileframework.data.common.dao;
 
+import cloud.agileframework.common.DataException;
 import cloud.agileframework.common.util.clazz.ClassUtil;
 import cloud.agileframework.common.util.clazz.TypeReference;
 import cloud.agileframework.common.util.object.ObjectUtil;
 import cloud.agileframework.data.common.dictionary.DataExtendManager;
+import cloud.agileframework.dictionary.util.TranslateException;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.PagerUtils;
 import com.alibaba.druid.sql.SQLUtils;
@@ -33,6 +35,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -70,7 +73,7 @@ public interface BaseDao {
      */
     default <T> void save(T o) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         saveAndReturn(o);
     }
@@ -101,22 +104,17 @@ public interface BaseDao {
      *
      * @return Connection
      */
-    Connection getConnection();
+    Connection getConnection() throws SQLException;
 
     default <T> boolean contains(T o) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         Class<T> aClass = (Class<T>) o.getClass();
         PagingAndSortingRepository<T, Object> r = getRepository(aClass);
 
-        try {
-            Object id = getId(o);
-            return r.existsById(id);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            e.printStackTrace();
-        }
-        return false;
+        Object id = getId(o);
+        return r.existsById(id);
     }
 
     /**
@@ -128,18 +126,14 @@ public interface BaseDao {
      */
     default <T> T saveOrUpdate(T o) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
-        try {
-            Object id = getId(o);
-            if (existsById(o.getClass(), id)) {
-                deleteById(o.getClass(), id);
-                return saveAndReturn(o, true);
-            }
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            e.printStackTrace();
+        Object id = getId(o);
+        if (existsById(o.getClass(), id)) {
+            deleteById(o.getClass(), id);
+            return saveAndReturn(o, true);
         }
-        return null;
+        return saveAndReturn(o);
     }
 
 
@@ -154,7 +148,7 @@ public interface BaseDao {
     @SuppressWarnings("unchecked")
     default <T> T saveAndReturn(T o, boolean isFlush) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         Class<T> aClass = (Class<T>) o.getClass();
         PagingAndSortingRepository<T, Object> r = getRepository(aClass);
@@ -172,7 +166,7 @@ public interface BaseDao {
      */
     default <T> T saveAndReturn(T o) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         return saveAndReturn(o, Boolean.FALSE);
     }
@@ -202,7 +196,7 @@ public interface BaseDao {
      * @param id         数据主键
      * @return 是否存在
      */
-    default <T> boolean existsById(Class<T> tableClass, Object id) throws NoSuchFieldException {
+    default <T> boolean existsById(Class<T> tableClass, Object id) {
         PagingAndSortingRepository<T, Object> r = getRepository(tableClass);
         return r.existsById(toIdType(tableClass, id));
     }
@@ -214,9 +208,9 @@ public interface BaseDao {
      * @param <T> 表对应的实体类型
      * @return 是否更新成功
      */
-    default <T> boolean update(T o) throws NoSuchFieldException, IllegalAccessException {
+    default <T> boolean update(T o) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         Class<T> aClass = (Class<T>) o.getClass();
         Object id = getId(o);
@@ -235,12 +229,11 @@ public interface BaseDao {
      * @param o   表映射实体类型的对象
      * @param <T> 表映射实体类型的对象
      * @return 返回更新后的数据
-     * @throws IllegalAccessException 异常
      */
     @SuppressWarnings("unchecked")
-    default <T> T updateOfNotNull(T o) throws NoSuchFieldException, IllegalAccessException {
+    default <T> T updateOfNotNull(T o) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         Class<T> aClass = (Class<T>) o.getClass();
         Object id = getId(o);
@@ -261,7 +254,7 @@ public interface BaseDao {
      */
     default <T> void delete(T o) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         Class<T> aClass = (Class<T>) o.getClass();
         getRepository(aClass).delete(o);
@@ -311,11 +304,11 @@ public interface BaseDao {
      * @param <T>        查询的目标表对应实体类型
      * @param ids        主键数组
      */
-    default <T> void deleteInBatch(Class<T> tableClass, Object[] ids) throws NoSuchFieldException {
+    default <T> void deleteInBatch(Class<T> tableClass, Object[] ids) {
         deleteInBatch(tableClass, Sets.newHashSet(ids));
     }
 
-    default <T> void deleteInBatch(Class<T> tableClass, Iterable<?> ids) throws NoSuchFieldException {
+    default <T> void deleteInBatch(Class<T> tableClass, Iterable<?> ids) {
         if (ids == null) {
             return;
         }
@@ -366,17 +359,12 @@ public interface BaseDao {
     @SuppressWarnings("unchecked")
     default <T> T findOne(T object) {
         if (object instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         PagingAndSortingRepository<T, Object> repository = (PagingAndSortingRepository<T, Object>) getRepository(object.getClass());
-        try {
-            T newObject = repository.findById(getId(object)).orElse(null);
-            dictionaryManager().cover(newObject);
-            return newObject;
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            e.printStackTrace();
-        }
-        return null;
+        T newObject = repository.findById(getId(object)).orElse(null);
+        dictionaryManager().cover(newObject);
+        return newObject;
     }
 
     /**
@@ -404,7 +392,7 @@ public interface BaseDao {
      */
     default <T> List<T> findAll(T object) {
         if (object instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         List<T> content = findBySQL(toSelectSql(object, Sort.unsorted(), DbType.mysql), (Class<T>) object.getClass(), null);
         dictionaryManager().cover(content);
@@ -413,7 +401,7 @@ public interface BaseDao {
 
     default <T> List<T> findAll(T object, Sort sort) {
         if (object instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         List<T> content = findBySQL(toSelectSql(object, sort, DbType.mysql), (Class<T>) object.getClass(), null);
         dictionaryManager().cover(content);
@@ -431,7 +419,7 @@ public interface BaseDao {
      */
     default <T> Page<T> page(T object, int page, int size) {
         if (object instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         return page(object, page, size, Sort.unsorted());
     }
@@ -448,7 +436,7 @@ public interface BaseDao {
      */
     default <T> Page<T> page(T object, int page, int size, Sort sort) {
         if (object instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         return page(object, PageRequest.of(page, size, sort));
     }
@@ -611,7 +599,7 @@ public interface BaseDao {
      *
      * @param list 要更新的数据集合
      */
-    default <T> void batchUpdate(List<T> list) throws NoSuchFieldException, IllegalAccessException {
+    default <T> void batchUpdate(List<T> list) {
         batchUpdate(list, 1000);
     }
 
@@ -640,7 +628,7 @@ public interface BaseDao {
      * @param list      要更新的数据集合
      * @param batchSize 多少条执行一次更新
      */
-    default <T> void batchUpdate(List<T> list, int batchSize) throws NoSuchFieldException, IllegalAccessException {
+    default <T> void batchUpdate(List<T> list, int batchSize) {
         for (Object o : list) {
             update(o);
         }
@@ -663,7 +651,7 @@ public interface BaseDao {
      * @param clazz 查询的目标表对应实体类型，Entity
      * @return 主键属性
      */
-    default Field getIdField(Class<?> clazz) throws NoSuchFieldException {
+    default Field getIdField(Class<?> clazz) {
         Set<ClassUtil.Target<Id>> e = ClassUtil.getAllEntityAnnotation(clazz, Id.class);
         Member member = e.iterator().next().getMember();
         if (member instanceof Field) {
@@ -673,17 +661,25 @@ public interface BaseDao {
         if (methodName.startsWith("get")) {
             return ClassUtil.getField(clazz, methodName.substring(3));
         }
-        throw new NoSuchFieldException("没找到主键字段");
+        throw new DataException(new NoSuchFieldException("没找到主键字段"));
     }
 
-    default Object getId(Object o) throws NoSuchFieldException, IllegalAccessException {
-        return getIdField(o.getClass()).get(o);
+    default Object getId(Object o) {
+        try {
+            return getIdField(o.getClass()).get(o);
+        } catch (IllegalAccessException e) {
+            throw new DataException(e);
+        }
     }
 
-    default void setId(Object o, Object id) throws NoSuchFieldException, IllegalAccessException {
-        final Field idField = getIdField(o.getClass());
-        idField.setAccessible(true);
-        idField.set(o, ObjectUtil.to(id, new TypeReference<>(idField.getType())));
+    default void setId(Object o, Object id) {
+        try {
+            final Field idField = getIdField(o.getClass());
+            idField.setAccessible(true);
+            idField.set(o, ObjectUtil.to(id, new TypeReference<>(idField.getType())));
+        } catch (IllegalAccessException e) {
+            throw new DataException(e);
+        }
     }
 
     /**
@@ -692,7 +688,7 @@ public interface BaseDao {
      * @param clazz 主键java类型
      * @return 主键java类型
      */
-    default Class<?> getIdType(Class<?> clazz) throws NoSuchFieldException {
+    default Class<?> getIdType(Class<?> clazz) {
         return getIdField(clazz).getType();
     }
 
@@ -703,7 +699,7 @@ public interface BaseDao {
      * @param id    主键
      * @return 转换后的主键
      */
-    default Object toIdType(Class<?> clazz, Object id) throws NoSuchFieldException {
+    default Object toIdType(Class<?> clazz, Object id) {
         return ObjectUtil.to(id, new TypeReference<>(getIdType(clazz)));
     }
 
@@ -717,7 +713,7 @@ public interface BaseDao {
      */
     default <T> String toSelectSql(T o, Sort sort, DbType dbType) {
         if (o instanceof Class || o == null) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
 
         TableWrapper<T> tableWrapper = new TableWrapper<>(o, this::toColumnNames, this::toTableName);
@@ -738,7 +734,7 @@ public interface BaseDao {
 
     default <T> String toUpdateSql(T o, DbType dbType) {
         if (o instanceof Class || o == null) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
 
         TableWrapper<T> tableWrapper = new TableWrapper<>(o, this::toColumnNames, this::toTableName);
@@ -766,7 +762,7 @@ public interface BaseDao {
 
     default <T> String toInsertSql(T o, DbType dbType) {
         if (o instanceof Class || o == null) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
 
         TableWrapper<T> tableWrapper = new TableWrapper<>(o, this::toColumnNames, this::toTableName);
@@ -789,7 +785,7 @@ public interface BaseDao {
 
     default <T> String toInsertSql(List<T> list, DbType dbType) {
         if (list == null || list.isEmpty()) {
-            throw new IllegalArgumentException("Parameter contains at least one element");
+            throw new DataException(new IllegalArgumentException("Parameter contains at least one element"));
         }
 
         List<TableWrapper<T>> rows = list.stream().map(c -> new TableWrapper<>(c, this::toColumnNames, this::toTableName)).collect(Collectors.toList());
@@ -818,7 +814,7 @@ public interface BaseDao {
 
     default <T> String toDeleteSql(T o, DbType dbType) {
         if (o instanceof Class || o == null) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
 
         TableWrapper<T> tableWrapper = new TableWrapper<>(o, this::toColumnNames, this::toTableName);
@@ -842,7 +838,7 @@ public interface BaseDao {
 
     default <T> String toPageSQL(T o, PageRequest pageRequest, DbType dbType) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         String select = toSelectSql(o, pageRequest.getSort(), dbType);
         int pageSize = pageRequest.getPageSize();
@@ -852,7 +848,7 @@ public interface BaseDao {
 
     default <T> String toPageCountSQL(T o, PageRequest pageRequest, DbType dbType) {
         if (o instanceof Class) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
         String select = toSelectSql(o, pageRequest.getSort(), dbType);
         return PagerUtils.count(select, DbType.mysql);
@@ -867,7 +863,7 @@ public interface BaseDao {
      */
     default <T> Map<String, Optional<Object>> toColumnValueMapping(T o) {
         if (o instanceof Class || o == null) {
-            throw new IllegalArgumentException("Parameter must be of type POJO");
+            throw new DataException(new IllegalArgumentException("Parameter must be of type POJO"));
         }
 
         Class<?> tableClass = o.getClass();

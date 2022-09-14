@@ -1,5 +1,7 @@
 package cloud.agileframework.data.common.dictionary;
 
+import cloud.agileframework.dictionary.util.TranslateException;
+
 /**
  * @author 佟盟
  * 日期 2020/7/15 19:17
@@ -13,5 +15,5 @@ public interface DataExtendManager {
      *
      * @param o 转换前的对象
      */
-    void cover(Object o);
+    void cover(Object o) throws TranslateException;
 }

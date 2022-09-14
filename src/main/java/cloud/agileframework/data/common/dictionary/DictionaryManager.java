@@ -1,6 +1,7 @@
 package cloud.agileframework.data.common.dictionary;
 
-import cloud.agileframework.dictionary.util.DictionaryUtil;
+import cloud.agileframework.dictionary.util.ConvertDicAnnotation;
+import cloud.agileframework.dictionary.util.TranslateException;
 
 /**
  * @author 佟盟
@@ -12,6 +13,6 @@ import cloud.agileframework.dictionary.util.DictionaryUtil;
 public class DictionaryManager implements DataExtendManager {
     @Override
     public void cover(Object o) {
-        DictionaryUtil.cover(o);
+        ConvertDicAnnotation.cover(o);
     }
 }
