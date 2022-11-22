@@ -5,7 +5,6 @@ import cloud.agileframework.common.util.clazz.ClassUtil;
 import cloud.agileframework.common.util.clazz.TypeReference;
 import cloud.agileframework.common.util.object.ObjectUtil;
 import cloud.agileframework.data.common.dictionary.DataExtendManager;
-import cloud.agileframework.dictionary.util.TranslateException;
 import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.PagerUtils;
 import com.alibaba.druid.sql.SQLUtils;
@@ -367,6 +366,10 @@ public interface BaseDao {
         return newObject;
     }
 
+    default Map<String, Object> findOne(String sql, Object... parameters) {
+        return findBySQL(sql, parameters).stream().findFirst().orElse(null);
+    }
+
     /**
      * 根据sql查询出单条数据，并映射成指定clazz类型
      *
@@ -470,6 +473,10 @@ public interface BaseDao {
         return pageByClass(tableClass, PageRequest.of(page - 1, size));
     }
 
+    default Page<Map<String, Object>> pageBySQL(String sql, PageRequest pageable, Object... parameters) {
+        return pageBySQL(sql, pageable, null, parameters);
+    }
+
     /**
      * 分页查询
      *
@@ -483,6 +490,10 @@ public interface BaseDao {
 
     default <T> Page<T> pageBySQL(String sql, int page, int size, Class<T> clazz, Object... parameters) {
         return pageBySQL(sql, PageRequest.of(page - 1, size, Sort.unsorted()), clazz, parameters);
+    }
+
+    default Page<Map<String, Object>> pageBySQL(String sql, int page, int size, Object... parameters) {
+        return pageBySQL(sql, PageRequest.of(page - 1, size, Sort.unsorted()), parameters);
     }
 
     /**
